@@ -1,0 +1,10 @@
+# document gateway config
+
+#Maximum client connections
+clients:1024
+#The maximum number of bytes in the receiving buffer of the client is limited, 
+#and the maximum number of single packet is displayed as 1 / 2 of the maximum 
+#limit of the buffer
+client_receive_buffer:4069
+#Maximum number of clients receiving transaction pipeline queues
+client_receive_event_chan:512

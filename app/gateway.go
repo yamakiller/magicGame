@@ -13,9 +13,9 @@ import (
 //@Member int client receive buffer byte size
 //@Member int client receive event chan size
 type GWDeploy struct {
-	Clients         int `yaml:"Clients"`
-	ClientReceive   int `yaml:"Client buffer"`
-	ClinetEventChan int `yaml:"Client event chan"`
+	Clients                int `yaml:"clients"`
+	ClientReceive          int `yaml:"client_receive_buffer"`
+	ClinetReceiveEventChan int `yaml:"client_receive_event_chan"`
 }
 
 //Gateway doc

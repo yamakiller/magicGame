@@ -1,6 +1,6 @@
 package assembly
 
-//Router doc
+//NRouter doc
 //@Summary Routing service
-type Router struct {
+type NRouter struct {
 }
