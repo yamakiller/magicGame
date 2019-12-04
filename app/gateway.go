@@ -6,6 +6,18 @@ import (
 	"github.com/yamakiller/magicNet/core"
 )
 
+//GWDeploy doc
+//@Summary gateway config data
+//@Struct GWDeploy
+//@Member int client max connection of number
+//@Member int client receive buffer byte size
+//@Member int client receive event chan size
+type GWDeploy struct {
+	Clients         int `yaml:"Clients"`
+	ClientReceive   int `yaml:"Client buffer"`
+	ClinetEventChan int `yaml:"Client event chan"`
+}
+
 //Gateway doc
 //@Summary gateway server
 //@Struct Gateway
