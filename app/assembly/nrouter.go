@@ -1,6 +1,7 @@
 package assembly
 
 //NRouter doc
-//@Summary Routing service
+//@Summary Manage route calculation and connection management
+//@Struct NRouter
 type NRouter struct {
 }
