@@ -80,12 +80,16 @@ type RouteSet struct {
 	_r *router.RouteGroup
 }
 
+func (slf *RouteSet) IsExist(addr, srvAddr string) bool {
+	return slf._r.IsExist(addr, srvAddr)
+}
+
 func (slf *RouteSet) Register(addr, srvAddr string, c *RouteCtrl) {
 	slf._r.Register(addr, srvAddr, c)
 }
 
-func (slf *RouteSet) UnRegister(addr, key string) {
-	slf._r.UnRegister(addr, key)
+func (slf *RouteSet) UnRegister(addr, srvAddr string) {
+	slf._r.UnRegister(addr, srvAddr)
 }
 
 func (slf *RouteSet) Call(addr, method string, param, ret proto.Message) error {

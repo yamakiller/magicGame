@@ -29,7 +29,7 @@ func (slf *clientAllocer) Initial() {
 	slf._pool = &sync.Pool{
 		New: func() interface{} {
 			c := new(client)
-			c.ReceiveBuffer = buffer.New(slf._parent._bfSize)
+			c.ReceiveBuffer = buffer.NewBuffer(slf._parent._bfSize)
 			return c
 		},
 	}

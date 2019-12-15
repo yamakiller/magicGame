@@ -2,8 +2,14 @@ package gateway
 
 import (
 	"sync"
+	"time"
+
+	"github.com/yamakiller/magicLibs/coroutine"
+
+	"github.com/yamakiller/magicNet/network"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler"
 	"github.com/yamakiller/magicNet/handler/implement/listener"
 	"github.com/yamakiller/magicNet/handler/net"
@@ -17,17 +23,17 @@ const (
 )
 
 type Options struct {
-	Name         string
-	ServerID     int
-	SocketMode   int
-	BufferLimit  int
-	KeepTime     int
-	OutCChanSize int
-	Cap          int
-	Replicas     int
-	Decoder      net.INetDecoder
-	AsyncAccept  func(net.INetClient) error
-	AsyncClosed  func(uint64) error
+	Name          string
+	ServerID      int
+	SocketMode    int
+	BufferLimit   int
+	KeepTime      int
+	OutCChanSize  int
+	Cap           int
+	Replicas      int
+	AuthTimeout   int64
+	GuardInterval int64
+	Delegate      IServerDelegate
 }
 
 type Option func(*Options) error
@@ -81,18 +87,6 @@ func SetClientOutChanSize(ch int) Option {
 	}
 }
 
-//SetClientDecoder doc
-//@Summary Set the connection client data decoder
-//@Method SetClientDecoder
-//@Param  net.INetDecoder decoder
-//@Return Option
-func SetClientDecoder(d net.INetDecoder) Option {
-	return func(o *Options) error {
-		o.Decoder = d
-		return nil
-	}
-}
-
 //SetClientKeepTime doc
 //@Summary Set the heartbeat interval of the connected client in milliseconds
 //@Param   int Interval time in milliseconds
@@ -104,31 +98,42 @@ func SetClientKeepTime(tm int) Option {
 	}
 }
 
-//SetAsyncAccept doc
-//@Summary  Set listen accept asynchronous callback function
-//@Method   SetAsyncAccept
-//@Param    func(net.INetClient) error  Callback
-//@Return   Option
-func SetAsyncAccept(f func(net.INetClient) error) Option {
+func SetAuthTimeout(tm int64) Option {
 	return func(o *Options) error {
-		o.AsyncAccept = f
+		o.AuthTimeout = tm
 		return nil
 	}
 }
 
-//SetAsyncClose doc
-//@Summary Set the client to close the asynchronous callback function
-//@Method Close
-//@Param  func(uint64) error Callback
-//@Return Option
-func SetAsyncClosed(f func(uint64) error) Option {
+func SetGuardInterval(tm int64) Option {
 	return func(o *Options) error {
-		o.AsyncClosed = f
+		o.GuardInterval = tm
 		return nil
 	}
 }
 
-//New 创建一个网关服务,并设置相关参数
+func SetDelegate(delegate IServerDelegate) Option {
+	return func(o *Options) error {
+		o.Delegate = delegate
+		return nil
+	}
+}
+
+var (
+	defaultOption = Options{Name: "Gateway",
+		ServerID:      1,
+		SocketMode:    TCPNet,
+		BufferLimit:   8196,
+		KeepTime:      5 * 1000,
+		OutCChanSize:  32,
+		Cap:           4096,
+		Replicas:      32,
+		AuthTimeout:   2 * 1000,
+		GuardInterval: 5 * 1000,
+	}
+)
+
+//New Create a gateway service and set related parameters
 func New(options ...Option) (*Server, error) {
 	opts := Options{}
 	for _, opt := range options {
@@ -153,10 +158,10 @@ func New(options ...Option) (*Server, error) {
 			listener.SetClientKeepTime(opts.KeepTime),
 			listener.SetClientOutChanSize(opts.OutCChanSize),
 			listener.SetAsyncComplete(srv.asyncComplate),
-			listener.SetAsyncAccept(opts.AsyncAccept),
-			listener.SetAsyncClosed(opts.AsyncClosed),
+			listener.SetAsyncAccept(srv.asyncAccept),
+			listener.SetAsyncClosed(srv.asyncClosed),
 			listener.SetClientGroups(cGroup),
-			listener.SetClientDecoder(opts.Decoder),
+			listener.SetClientDecoder(srv.defaultDecode),
 		)
 
 		if err != nil {
@@ -165,6 +170,9 @@ func New(options ...Option) (*Server, error) {
 
 		srv._name = opts.Name
 		srv._listenHandle = h
+		srv._delegate = opts.Delegate
+		srv._authTimeout = opts.AuthTimeout
+		srv._guardInterval = opts.GuardInterval
 		srv._rss = NewRouteSet(opts.Replicas)
 		srv._listenHandle.Initial()
 		return srv._listenHandle
@@ -173,39 +181,132 @@ func New(options ...Option) (*Server, error) {
 	return srv, nil
 }
 
-type Server struct {
-	_name         string
-	_listenHandle *listener.NetListener
-	_listenWait   sync.WaitGroup
-	_rss          *RouteSet
-	_err          error
+type IServerDelegate interface {
+	AsyncDecode(net.INetClient) (*AgreMessage, error)
+	AsyncEncode(response interface{}) ([]byte, error)
+	AsyncAccept(net.INetClient) error
+	AsyncClosed(uint64) error
+
+	QueryAsyncMethod(interface{}) (string, interface{}, bool, error)
 }
 
-//Control 创建一个控制器
+//Server doc: Gateway Server
+type Server struct {
+	_delegate      IServerDelegate
+	_name          string
+	_listenHandle  *listener.NetListener
+	_listenWait    sync.WaitGroup
+	_rss           *RouteSet
+	_authTimeout   int64
+	_guardInterval int64
+	_err           error
+	_ishutdown     bool
+}
+
+//Control Create a Control
+//@Param  *RouteOption control option
+//@Return *RouteCtrl
+//@Return  error
 func (slf *Server) Control(opts *RouteOption) (*RouteCtrl, error) {
 	return newCtrl(opts)
 }
 
-//Router 添加一个路由
+//Router Add a route
+//@Param route address
+//@Param route server name
+//@Param network agreement name/object
+//@Param network agreement => method
+//@Param route control option
 func (slf *Server) Router(addr string, server string, ctrl *RouteCtrl) {
 	slf._rss.Register(addr, server, ctrl)
 }
 
-//Router 通过路由动态调用Retmote方法
+//Router Dynamically calling the Retmote method via a route
 func (slf *Server) RouteCall(addr, method string, param, ret proto.Message) error {
 	return slf._rss.Call(addr, method, param, ret)
 }
 
-//Listen 监听服务
+//Listen Start listen
 func (slf *Server) Listen(addr string) error {
 	slf._listenWait.Add(1)
-	if err := slf._listenHandle.Listen(addr); err != nil {
+	if slf._err = slf._listenHandle.Listen(addr); slf._err != nil {
 		slf._listenWait.Done()
-		return err
+		return slf._err
 	}
 
 	slf._listenWait.Wait()
 	return slf._err
+}
+
+func (slf *Server) defaultDecode(context actor.Context, params ...interface{}) error {
+	c := params[1].(client)
+	argee, err := slf._delegate.AsyncDecode(params[1].(net.INetClient))
+	if err != nil {
+		return err
+	}
+
+	actor.DefaultSchedulerContext.Send(c.GetPID(), argee)
+
+	return nil
+}
+
+func (slf *Server) asyncGuard([]interface{}) {
+	startTime := (time.Now().UnixNano() / int64(time.Millisecond))
+	curreTime := startTime
+	interval := curreTime
+	defer slf._listenWait.Done()
+	for {
+		if slf._ishutdown {
+			break
+		}
+
+		curreTime = (time.Now().UnixNano() / int64(time.Millisecond))
+		interval = curreTime - startTime
+		var c net.INetClient
+		var cs *client
+		clients := slf._listenHandle.GetClients()
+		for _, v := range clients {
+			c = slf._listenHandle.Grap(v)
+			if c == nil {
+				continue
+			}
+
+			cs = c.(*client)
+			if cs._auth > 1 {
+				continue
+			}
+
+			if cs._auth == 0 {
+				continue
+			}
+
+			cs._authLastTime -= interval
+			if cs._authLastTime <= 0 {
+				network.OperClose(cs.GetSocket())
+			}
+		}
+		startTime = curreTime
+		time.Sleep(time.Duration(slf._guardInterval) * time.Millisecond)
+
+	}
+}
+
+func (slf *Server) asyncAccept(c net.INetClient) error {
+	c.(*client)._parent = slf
+	c.(*client)._auth = 1
+	c.(*client)._authLastTime = slf._authTimeout
+	network.OperOpen(c.GetSocket())
+	if slf._delegate != nil {
+		return slf._delegate.AsyncAccept(c)
+	}
+	return nil
+}
+
+func (slf *Server) asyncClosed(h uint64) error {
+	if slf._delegate != nil {
+		return slf._delegate.AsyncClosed(h)
+	}
+	return nil
 }
 
 func (slf *Server) asyncError(err error) {
@@ -216,10 +317,14 @@ func (slf *Server) asyncError(err error) {
 func (slf *Server) asyncComplate(sock int32) {
 	defer slf._listenWait.Done()
 	slf._err = nil
+	slf._listenWait.Add(1)
+	coroutine.Instance().Go(slf.asyncGuard)
 }
 
-//Shutdown 终止服务
+//Shutdown shutdown server
 func (slf *Server) Shutdown() {
+	slf._ishutdown = true
+	slf._listenWait.Wait()
 	if slf._listenHandle != nil {
 		slf._listenHandle.Shutdown()
 		slf._listenHandle = nil
