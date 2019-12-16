@@ -1,6 +1,6 @@
 package gateway
 
-type AgreMessage struct {
+type AgreMsg struct {
 	Agreement     interface{}
 	AgreementData interface{}
 }

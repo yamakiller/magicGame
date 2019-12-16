@@ -181,13 +181,20 @@ func New(options ...Option) (*Server, error) {
 	return srv, nil
 }
 
+//IServerDelegate doc
+//@Summary gateway server delegate interface
+//@Member AsyncDecode network data decode method
+//@Member AsyncEncode network data encode method
+//@Member AsynAccept  client accept method
+//@Member AsynClosed  client closed method
+//@Member QueryLocalAgreement query agreement local method
 type IServerDelegate interface {
-	AsyncDecode(net.INetClient) (*AgreMessage, error)
+	AsyncDecode(net.INetClient) (*AgreMsg, error)
 	AsyncEncode(response interface{}) ([]byte, error)
 	AsyncAccept(net.INetClient) error
 	AsyncClosed(uint64) error
-
-	QueryAsyncMethod(interface{}) (string, interface{}, bool, error)
+	QueryLocalAgreement(agreement interface{}) (string, interface{}, bool, error)
+	QueryRemoteAgreement(agreement interface{}) (string, error)
 }
 
 //Server doc: Gateway Server

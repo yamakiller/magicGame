@@ -26,7 +26,7 @@ type client struct {
 //@Method Initial
 func (slf *client) Initial() {
 	slf.NetSSrvCleint.Initial()
-	slf.RegisterMethod(&AgreMessage{}, slf.onAgreement)
+	slf.RegisterMethod(&AgreMsg{}, slf.onAgreement)
 }
 
 //SetID doc
@@ -71,8 +71,8 @@ func (slf *client) Secert() uint64 {
 }
 
 func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message interface{}) {
-	req := message.(*AgreMessage)
-	addr, m, isauth, err := slf._parent._delegate.QueryAsyncMethod(req.Agreement)
+	req := message.(*AgreMsg)
+	addr, m, isauth, err := slf._parent._delegate.QueryLocalAgreement(req.Agreement)
 	if err != nil {
 		slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
 		return

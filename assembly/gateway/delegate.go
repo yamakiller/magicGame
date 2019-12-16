@@ -41,21 +41,13 @@ func getDataNameLength(d uint32) int {
 }
 
 func decoder(bf net.INetReceiveBuffer) (string, []byte, error) {
-	//#Data Header#######################################
-	/******************************
-	|      24 Bit   |    8 Bit	  |
-	|-------------  |-------------|
-	|  Data Length  |  Data Name  |
-	|			    |	Length    |
-	*******************************
-	//#Data Chunk########################################
-	/*********************************|
-	|   Data Name Length  |    （N）  |
-	|         Bit         |    Bit   |
-	|---------------------|----------|
-	|	   Data Name      |   Data   |
-	|					  |			 |
-	*********************************/
+
+	/***************************************************************|
+	|      24 Bit   |    8 Bit	  |     N Bit    |    （N） Bit      |
+	|-------------  |-------------|--------------|------------------|
+	|  Data Length  |  Data Name  |  Data Name   |      Data        |
+	|			    |	Length    |				 |					|
+	****************************************************************/
 
 	if bf.GetBufferLen() > constHeadByte {
 		return "", nil, net.ErrAnalysisProceed
@@ -84,7 +76,7 @@ func encoder(dataName string, data []byte) []byte {
 	dataNameLength := len([]byte(dataName))
 	dataLength := len(data)
 
-	var header uint32 = uint32(((dataLength & constDataLengthMask) << constDataLengthShift))
+	header := uint32(((dataLength & constDataLengthMask) << constDataLengthShift))
 	header = (header | uint32(dataNameLength&constDataNameLengthMask))
 
 	result := make([]byte, constHeadByte+dataNameLength+dataLength)
@@ -95,21 +87,49 @@ func encoder(dataName string, data []byte) []byte {
 	return result
 }
 
-type DefaultMethod struct {
+//DefaultAgreement doc
+//@Summary default agreement method
+//@Member  route address
+//@Member  local method
+//@Member  remove method
+//@Member  is auth
+type DefaultAgreement struct {
 	Addr         string
-	Method       interface{}
+	LocalMethod  interface{}
 	RemoteMethod string
 	Auth         bool
 }
 
+//DefaultDelegate doc
+//@Summary default gateserver delegate instance
+//@Member  map  method
 type DefaultDelegate struct {
-	_ms map[interface{}]*DefaultMethod
+	_mas map[interface{}]*DefaultAgreement
 }
 
-func (slf *DefaultDelegate) RegisterAyncMethod(key interface{}, addr string, method interface{}, remoteMethod string, auth bool) {
-	slf._ms[reflect.TypeOf(key)] = &DefaultMethod{addr, method, remoteMethod, auth}
+//RegisterAgreement doc
+//@Summary register agreement
+//@Param agreement
+//@Param route address
+//@Param local method
+//@Param remote method
+//@Param is need auth
+func (slf *DefaultDelegate) RegisterAgreement(agreement interface{},
+	addr string,
+	localMethod interface{},
+	remoteMethod string,
+	auth bool) {
+
+	slf._mas[reflect.TypeOf(agreement)] = &DefaultAgreement{addr,
+		localMethod,
+		remoteMethod,
+		auth}
 }
 
+//AsyncAccept doc
+//@Summary server accept event
+//@Param  client
+//@Return error
 func (slf *DefaultDelegate) AsyncAccept(c net.INetClient) error {
 	publicKey := c.(*client).KeyPair()
 	x := make([]byte, 8)
@@ -120,28 +140,52 @@ func (slf *DefaultDelegate) AsyncAccept(c net.INetClient) error {
 	return nil
 }
 
-func (slf *DefaultDelegate) AsyncClosed(uint64) error {
+//AsyncClosed doc
+//@Summary server closed client event
+//@Param client handle
+//@Return error
+func (slf *DefaultDelegate) AsyncClosed(handle uint64) error {
 	return nil
 }
 
-func (slf *DefaultDelegate) QueryAsyncMethod(key interface{}) (string, interface{}, bool, error) {
+//QueryLocalAgreement doc
+//@Summary query agreement local method
+//@Param  agreement
+//@Return route address
+//@Return local method
+//@Return is auth
+//@Return error
+func (slf *DefaultDelegate) QueryLocalAgreement(agreement interface{}) (addr string,
+	localMethod interface{},
+	auth bool,
+	err error) {
 
-	if v, ok := slf._ms[key]; ok {
-		return v.Addr, v.Method, v.Auth, nil
+	if v, ok := slf._mas[agreement]; ok {
+		return v.Addr, v.LocalMethod, v.Auth, nil
 	}
 
 	return "", nil, false, nil
 }
 
-func (slf *DefaultDelegate) QueryAsyncRemoteMethod(key interface{}) (string, error) {
-	if v, ok := slf._ms[key]; ok {
+//QueryRemoteAgreement doc
+//@Summary query agreement remote method
+//@Param   agreement
+//@Return  remote method
+//@Return  error
+func (slf *DefaultDelegate) QueryRemoteAgreement(agreement interface{}) (string, error) {
+	if v, ok := slf._mas[agreement]; ok {
 		return v.RemoteMethod, nil
 	}
 
-	return "", fmt.Errorf("%+v protocol remote method is not defined", key)
+	return "", fmt.Errorf("%+v protocol remote method is not defined", agreement)
 }
 
-func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMessage, error) {
+//AsyncDecode doc
+//@Summary network data decode method
+//@Param   client
+//@Return  AgreMessage
+//@Return  error
+func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
 	if c.(*client).Secert() == 0 {
 		if c.GetBufferLen() < 8 {
 			return nil, net.ErrAnalysisProceed
@@ -168,9 +212,14 @@ func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMessage, error) 
 		return nil, err
 	}
 
-	return &AgreMessage{name, &msg}, nil
+	return &AgreMsg{name, &msg}, nil
 }
 
+//AsyncEncode doc
+//@Summary network data encode method
+//@Param   need encode data
+//@Return  encode result
+//@Return  error
 func (slf *DefaultDelegate) AsyncEncode(response interface{}) ([]byte, error) {
 
 	d, err := proto.Marshal(response.(proto.Message))
