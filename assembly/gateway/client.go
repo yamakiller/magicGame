@@ -1,10 +1,7 @@
 package gateway
 
 import (
-	"encoding/binary"
 	"reflect"
-
-	"github.com/yamakiller/magicLibs/encryption/dh64"
 
 	"github.com/yamakiller/magicNet/network"
 
@@ -20,7 +17,6 @@ type client struct {
 	_authLastTime int64
 	_auth         int64
 	_prvKey       uint64
-	_secert       []byte
 	_encrypt      encryption.INetEncryption
 }
 
@@ -40,9 +36,20 @@ func (slf *client) WithID(id uint64) {
 
 //WithEncrypt doc
 //@Summary Set Encryptor
-func (slf *client) WithEncrypt(encrypt encryption.INetEncryption) error {
+func (slf *client) WithEncrypt(encrypt encryption.INetEncryption) {
 	slf._encrypt = encrypt
-	return slf._encrypt.Cipher(slf._secert)
+}
+
+//WithPrvKey doc
+//@Summary Set private key
+func (slf *client) WithPrvKey(prvKey uint64) {
+	slf._prvKey = prvKey
+}
+
+//GetPrvKey doc
+//@Summary Return private key
+func (slf *client) GetPrvKey() uint64 {
+	return slf._prvKey
 }
 
 //GetID doc
@@ -50,25 +57,6 @@ func (slf *client) WithEncrypt(encrypt encryption.INetEncryption) error {
 //@Return uint64
 func (slf *client) GetID() uint64 {
 	return slf._handle
-}
-
-//KeyPair doc
-//@Summary Build Key Pair
-//@Return publicKey
-func (slf *client) KeyPair() uint64 {
-	prvKey, publicKey := dh64.KeyPair()
-	slf._prvKey = prvKey
-	return publicKey
-}
-
-//BuildSecert doc
-//@Summary Build Secert
-func (slf *client) BuildSecert(publicKey uint64) {
-	secert := dh64.Secret(slf._prvKey, publicKey)
-	if slf._secert == nil {
-		slf._secert = make([]byte, 8)
-	}
-	binary.BigEndian.PutUint64(slf._secert, secert)
 }
 
 //Encrypt doc
