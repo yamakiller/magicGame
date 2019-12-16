@@ -116,7 +116,7 @@ func (slf *clientGroup) Occupy(c net.INetClient) (uint64, error) {
 	slf._sockets[c.GetSocket()] = c
 
 	c.SetRef(2)
-	c.SetID(handleKey)
+	c.WithID(handleKey)
 	slf._sz++
 
 	return handleKey, nil

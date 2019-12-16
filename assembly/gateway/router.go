@@ -12,6 +12,8 @@ func ctrlDelete(p router.IRouteCtrl) {
 	p.(*RouteCtrl).Shutdown()
 }
 
+//RouteOption doc
+//@Summary route option informat
 type RouteOption struct {
 	Server        string `xml:"server" yaml:"server" json:"server"`
 	ServerAddr    string `xml:"server-address" yaml:"server address" json:"server-address"`
@@ -27,15 +29,15 @@ type RouteOption struct {
 func newCtrl(opts *RouteOption) (*RouteCtrl, error) {
 	rcl := &RouteCtrl{}
 	p, err := rpcc.New(
-		rpcc.SetName(opts.Server),
-		rpcc.SetAddr(opts.ServerAddr),
-		rpcc.SetBufferLimit(opts.Buffer),
-		rpcc.SetOutChanSize(opts.OutCChanSize),
-		rpcc.SetIdle(opts.Idle),
-		rpcc.SetActive(opts.Active),
-		rpcc.SetSocketTimeout(int64(opts.SocketTimeout)),
-		rpcc.SetTimeout(int64(opts.TimeOut)),
-		rpcc.SetIdleTimeout(int64(opts.IdleTimeout)),
+		rpcc.WithName(opts.Server),
+		rpcc.WithAddr(opts.ServerAddr),
+		rpcc.WithBufferCap(opts.Buffer),
+		rpcc.WithOutChanSize(opts.OutCChanSize),
+		rpcc.WithIdle(opts.Idle),
+		rpcc.WithActive(opts.Active),
+		rpcc.WithSocketTimeout(int64(opts.SocketTimeout)),
+		rpcc.WithTimeout(int64(opts.TimeOut)),
+		rpcc.WithIdleTimeout(int64(opts.IdleTimeout)),
 	)
 
 	if err != nil {
@@ -47,55 +49,69 @@ func newCtrl(opts *RouteOption) (*RouteCtrl, error) {
 	return rcl, nil
 }
 
+//RouteCtrl doc
+//@Summary route control
 type RouteCtrl struct {
 	_pool *rpcc.RPCClientPool
 	_ref  int32
 }
 
+//GetName Return Control name
 func (slf *RouteCtrl) GetName() string {
 	return slf._pool.GetName()
 }
 
+//IncRef Increment the reference counter
 func (slf *RouteCtrl) IncRef() {
 	atomic.AddInt32(&slf._ref, 1)
 }
 
+//DecRef Decrement the reference counter
 func (slf *RouteCtrl) DecRef() int {
 	return int(atomic.AddInt32(&slf._ref, -1))
 }
 
-func (slf *RouteCtrl) Call(method string, param interface{}, ret interface{}) error {
-	return slf._pool.Call(method, param, ret)
+//Call remote method
+func (slf *RouteCtrl) Call(remoteMethod string, param interface{}, ret interface{}) error {
+	return slf._pool.Call(remoteMethod, param, ret)
 }
 
+//Shutdown shutdown route control
 func (slf *RouteCtrl) Shutdown() {
 	slf._pool.Shutdown()
 }
 
+//NewRouteSet Create a route set
 func NewRouteSet(reps int) *RouteSet {
 	return &RouteSet{_r: router.New(ctrlDelete, reps)}
 }
 
+//RouteSet route sets
 type RouteSet struct {
 	_r *router.RouteGroup
 }
 
+//IsExist Whether the destination route exists
 func (slf *RouteSet) IsExist(addr, srvAddr string) bool {
 	return slf._r.IsExist(addr, srvAddr)
 }
 
+//Register Registered a route
 func (slf *RouteSet) Register(addr, srvAddr string, c *RouteCtrl) {
 	slf._r.Register(addr, srvAddr, c)
 }
 
+//UnRegister Unregister a route
 func (slf *RouteSet) UnRegister(addr, srvAddr string) {
 	slf._r.UnRegister(addr, srvAddr)
 }
 
+//Call Call a specified remote method
 func (slf *RouteSet) Call(addr, method string, param, ret proto.Message) error {
 	return slf._r.Call(addr, method, param, ret)
 }
 
+//Shutdown shutdown the route set
 func (slf *RouteSet) Shutdown() {
 	if slf._r != nil {
 		slf._r.Shutdown()

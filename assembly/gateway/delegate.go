@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/yamakiller/magicNet/handler/encryption"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicGame/assembly/code"
 	"github.com/yamakiller/magicNet/handler/net"
@@ -49,7 +51,7 @@ func decoder(bf net.INetReceiveBuffer) (string, []byte, error) {
 	|			    |	Length    |				 |					|
 	****************************************************************/
 
-	if bf.GetBufferLen() > constHeadByte {
+	if bf.GetBufferLen() < constHeadByte {
 		return "", nil, net.ErrAnalysisProceed
 	}
 
@@ -186,19 +188,28 @@ func (slf *DefaultDelegate) QueryRemoteAgreement(agreement interface{}) (string,
 //@Return  AgreMessage
 //@Return  error
 func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
-	if c.(*client).Secert() == 0 {
+	gwClient := c.(*client)
+	if gwClient.Encrypt() == nil {
 		if c.GetBufferLen() < 8 {
 			return nil, net.ErrAnalysisProceed
 		}
 
 		publicKey := binary.BigEndian.Uint64(c.ReadBuffer(8))
-		c.(*client).BuildSecert(publicKey)
+		gwClient.BuildSecert(publicKey)
+		if err := gwClient.WithEncrypt(&encryption.NetRC4Encrypt{}); err != nil {
+			return nil, err
+		}
 	}
 
 	name, data, err := decoder(c)
 	if err != nil {
 		return nil, err
 	}
+
+	nameByte := []byte(name)
+	gwClient.Encrypt().Decode(nameByte, []byte(name))
+	name = string(nameByte)
+	gwClient.Encrypt().Decode(data, data)
 
 	msgType := proto.MessageType(name)
 	if msgType == nil {
@@ -220,12 +231,27 @@ func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
 //@Param   need encode data
 //@Return  encode result
 //@Return  error
-func (slf *DefaultDelegate) AsyncEncode(response interface{}) ([]byte, error) {
-
+func (slf *DefaultDelegate) AsyncEncode(c net.INetClient,
+	response interface{}) ([]byte, error) {
+    gwClient := c.(*client)
 	d, err := proto.Marshal(response.(proto.Message))
 	if err != nil {
 		return nil, err
 	}
 
-	return encoder(proto.MessageName(response.(proto.Message)), d), nil
+	msgName := proto.MessageName(response.(proto.Message))
+
+	
+
+	return encoder(, d), nil
+}
+
+//TestDecoder test decoder
+func TestDecoder(bf net.INetReceiveBuffer) (string, []byte, error) {
+	return decoder(bf)
+}
+
+//TestEncoder test encoder
+func TestEncoder(dataName string, data []byte) []byte {
+	return encoder(dataName, data)
 }

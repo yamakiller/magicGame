@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/binary"
 	"reflect"
 
 	"github.com/yamakiller/magicLibs/encryption/dh64"
@@ -8,6 +9,7 @@ import (
 	"github.com/yamakiller/magicNet/network"
 
 	"github.com/yamakiller/magicNet/engine/actor"
+	"github.com/yamakiller/magicNet/handler/encryption"
 	srvc "github.com/yamakiller/magicNet/handler/implement/client"
 )
 
@@ -18,28 +20,33 @@ type client struct {
 	_authLastTime int64
 	_auth         int64
 	_prvKey       uint64
-	_secert       uint64
+	_secert       []byte
+	_encrypt      encryption.INetEncryption
 }
 
 //Initial doc
 //@Summary Initial gateway server accesser
-//@Method Initial
 func (slf *client) Initial() {
 	slf.NetSSrvCleint.Initial()
 	slf.RegisterMethod(&AgreMsg{}, slf.onAgreement)
 }
 
-//SetID doc
-//@Summary Setting handle/id
-//@Method SetID
+//WithID doc
+//@Summary Set handle/id
 //@Param uint64  handle/id
-func (slf *client) SetID(id uint64) {
+func (slf *client) WithID(id uint64) {
 	slf._handle = id
+}
+
+//WithEncrypt doc
+//@Summary Set Encryptor
+func (slf *client) WithEncrypt(encrypt encryption.INetEncryption) error {
+	slf._encrypt = encrypt
+	return slf._encrypt.Cipher(slf._secert)
 }
 
 //GetID doc
 //@Summary Returns handle/id
-//@Method GetID
 //@Return uint64
 func (slf *client) GetID() uint64 {
 	return slf._handle
@@ -47,7 +54,6 @@ func (slf *client) GetID() uint64 {
 
 //KeyPair doc
 //@Summary Build Key Pair
-//@Method KeyPair
 //@Return publicKey
 func (slf *client) KeyPair() uint64 {
 	prvKey, publicKey := dh64.KeyPair()
@@ -57,18 +63,26 @@ func (slf *client) KeyPair() uint64 {
 
 //BuildSecert doc
 //@Summary Build Secert
-//@Method BuildSecert
 func (slf *client) BuildSecert(publicKey uint64) {
-	slf._secert = dh64.Secret(slf._prvKey, publicKey)
+	secert := dh64.Secret(slf._prvKey, publicKey)
+	if slf._secert == nil {
+		slf._secert = make([]byte, 8)
+	}
+	binary.BigEndian.PutUint64(slf._secert, secert)
+}
+
+//Encrypt doc
+//@Summary Returns a encryptor
+func (slf *client) Encrypt() encryption.INetEncryption {
+	return slf._encrypt
 }
 
 //Secert doc
 //@Summary Return client secert
-//@Method Secert
 //@Return secert uint64
-func (slf *client) Secert() uint64 {
+/*func (slf *client) Secert() uint64 {
 	return slf._secert
-}
+}*/
 
 func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message interface{}) {
 	req := message.(*AgreMsg)
@@ -104,7 +118,7 @@ func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message
 			}
 		}
 
-		d, err := slf._parent._delegate.AsyncEncode(rs[0].Interface())
+		d, err := slf._parent._delegate.AsyncEncode(slf, rs[0].Interface())
 		if err != nil {
 			slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
 			return
@@ -120,6 +134,11 @@ func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message
 
 func (slf *client) Shutdown() {
 	slf.NetSSrvCleint.Shutdown()
+	if slf._encrypt != nil {
+		slf._encrypt.Destory()
+		slf._encrypt = nil
+	}
+
 	slf._auth = 0
 	slf._handle = 0
 	slf._parent = nil

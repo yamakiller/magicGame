@@ -22,11 +22,12 @@ const (
 	WWSNet = 1
 )
 
+//Options Gateway Server Options
 type Options struct {
 	Name          string
 	ServerID      int
 	SocketMode    int
-	BufferLimit   int
+	BufferCap     int
 	KeepTime      int
 	OutCChanSize  int
 	Cap           int
@@ -36,83 +37,83 @@ type Options struct {
 	Delegate      IServerDelegate
 }
 
+//Option Gateway Server Option function
 type Option func(*Options) error
 
-func SetName(name string) Option {
+//WithName Set Gateway Server Name
+func WithName(name string) Option {
 	return func(o *Options) error {
 		o.Name = name
 		return nil
 	}
 }
 
-// SetID setting id option
-func SetID(id int) Option {
+//WithID Set Gateway Server Id option
+func WithID(id int) Option {
 	return func(o *Options) error {
 		o.ServerID = id
 		return nil
 	}
 }
 
-//SetClientCap Set accesser cap option
-func SetClientCap(cap int) Option {
+//WithClientCap Set accesser cap option
+func WithClientCap(cap int) Option {
 	return func(o *Options) error {
 		o.Cap = cap
 		return nil
 	}
 }
 
-//SetClientBufferLimit Set client buffer limit option
-func SetClientBufferLimit(limit int) Option {
+//WithClientBufferCap Set client buffer limit option
+func WithClientBufferCap(cap int) Option {
 	return func(o *Options) error {
-		o.BufferLimit = limit
+		o.BufferCap = cap
 		return nil
 	}
 }
 
-func SetRouteReplicas(reps int) Option {
+//WithRouteReplicas Set route load replicas
+func WithRouteReplicas(reps int) Option {
 	return func(o *Options) error {
 		o.Replicas = reps
 		return nil
 	}
 }
 
-//SetClientOutChanSize doc
-//@Summary Set the connection client transaction pipeline buffer size
-//@Method SetClientOutChanSize
-//@Param  int Pipe buffer size
-func SetClientOutChanSize(ch int) Option {
+//WithClientOutChanSize Set the connection client transaction pipeline buffer size
+func WithClientOutChanSize(ch int) Option {
 	return func(o *Options) error {
 		o.OutCChanSize = ch
 		return nil
 	}
 }
 
-//SetClientKeepTime doc
-//@Summary Set the heartbeat interval of the connected client in milliseconds
-//@Param   int Interval time in milliseconds
-//@Return  Option
-func SetClientKeepTime(tm int) Option {
+//WithClientKeepTime Set the heartbeat interval of the connected client in milliseconds
+func WithClientKeepTime(tm int) Option {
 	return func(o *Options) error {
 		o.KeepTime = tm
 		return nil
 	}
 }
 
-func SetAuthTimeout(tm int64) Option {
+//WithAuthTimeout Set client auth time out
+func WithAuthTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.AuthTimeout = tm
 		return nil
 	}
 }
 
-func SetGuardInterval(tm int64) Option {
+//WithGuardInterval Set Server guard interval time
+func WithGuardInterval(tm int64) Option {
 	return func(o *Options) error {
 		o.GuardInterval = tm
 		return nil
 	}
 }
 
-func SetDelegate(delegate IServerDelegate) Option {
+//WithDelegate Set Server delegate
+func WithDelegate(delegate IServerDelegate) Option {
 	return func(o *Options) error {
 		o.Delegate = delegate
 		return nil
@@ -123,7 +124,7 @@ var (
 	defaultOption = Options{Name: "Gateway",
 		ServerID:      1,
 		SocketMode:    TCPNet,
-		BufferLimit:   8196,
+		BufferCap:     8196,
 		KeepTime:      5 * 1000,
 		OutCChanSize:  32,
 		Cap:           4096,
@@ -144,7 +145,7 @@ func New(options ...Option) (*Server, error) {
 
 	srv := &Server{}
 	handler.Spawn(opts.Name, func() handler.IService {
-		cGroup := &clientGroup{_id: opts.ServerID, _bfSize: opts.BufferLimit, _cap: opts.Cap}
+		cGroup := &clientGroup{_id: opts.ServerID, _bfSize: opts.BufferCap, _cap: opts.Cap}
 		var s net.INetListener
 		if opts.SocketMode == TCPNet {
 			s = &net.TCPListen{}
@@ -153,15 +154,15 @@ func New(options ...Option) (*Server, error) {
 		}
 
 		h, err := listener.Spawn(
-			listener.SetListener(s),
-			listener.SetAsyncError(srv.asyncError),
-			listener.SetClientKeepTime(opts.KeepTime),
-			listener.SetClientOutChanSize(opts.OutCChanSize),
-			listener.SetAsyncComplete(srv.asyncComplate),
-			listener.SetAsyncAccept(srv.asyncAccept),
-			listener.SetAsyncClosed(srv.asyncClosed),
-			listener.SetClientGroups(cGroup),
-			listener.SetClientDecoder(srv.defaultDecode),
+			listener.WithListener(s),
+			listener.WithAsyncError(srv.asyncError),
+			listener.WithClientKeepTime(opts.KeepTime),
+			listener.WithClientOutChanSize(opts.OutCChanSize),
+			listener.WithAsyncComplete(srv.asyncComplate),
+			listener.WithAsyncAccept(srv.asyncAccept),
+			listener.WithAsyncClosed(srv.asyncClosed),
+			listener.WithClientGroups(cGroup),
+			listener.WithClientDecoder(srv.defaultDecode),
 		)
 
 		if err != nil {
@@ -190,7 +191,7 @@ func New(options ...Option) (*Server, error) {
 //@Member QueryLocalAgreement query agreement local method
 type IServerDelegate interface {
 	AsyncDecode(net.INetClient) (*AgreMsg, error)
-	AsyncEncode(response interface{}) ([]byte, error)
+	AsyncEncode(net.INetClient, interface{}) ([]byte, error)
 	AsyncAccept(net.INetClient) error
 	AsyncClosed(uint64) error
 	QueryLocalAgreement(agreement interface{}) (string, interface{}, bool, error)
@@ -199,10 +200,10 @@ type IServerDelegate interface {
 
 //Server doc: Gateway Server
 type Server struct {
-	_delegate      IServerDelegate
 	_name          string
 	_listenHandle  *listener.NetListener
 	_listenWait    sync.WaitGroup
+	_delegate      IServerDelegate
 	_rss           *RouteSet
 	_authTimeout   int64
 	_guardInterval int64
@@ -228,7 +229,7 @@ func (slf *Server) Router(addr string, server string, ctrl *RouteCtrl) {
 	slf._rss.Register(addr, server, ctrl)
 }
 
-//Router Dynamically calling the Retmote method via a route
+//RouteCall Router Dynamically calling the Retmote method via a route
 func (slf *Server) RouteCall(addr, method string, param, ret proto.Message) error {
 	return slf._rss.Call(addr, method, param, ret)
 }
