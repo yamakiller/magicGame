@@ -271,3 +271,11 @@ func (slf *DefaultDelegate) AsyncEncode(c net.INetClient,
 
 	return encoder(encryptor, msgName, d), nil
 }
+
+func TestDecoder(encrypt encryption.INetEncryption, bf net.INetReceiveBuffer) (string, []byte, error) {
+	return decoder(encrypt, bf)
+}
+
+func TestEncoder(encrypt encryption.INetEncryption, dataName string, data []byte) []byte {
+	return encoder(encrypt, dataName, data)
+}
