@@ -121,9 +121,9 @@ type DefaultAgreement struct {
 //@Summary default gateserver delegate instance
 //@Member  map  method
 type DefaultDelegate struct {
-	_keyExc    *dh64.KeyExchange
-	_isOpenKey bool
-	_mas       map[interface{}]*DefaultAgreement
+	KeyExc    *dh64.KeyExchange
+	IsEncrypt bool
+	_mas      map[interface{}]*DefaultAgreement
 }
 
 //RegisterAgreement doc
@@ -150,7 +150,7 @@ func (slf *DefaultDelegate) RegisterAgreement(agreement interface{},
 //@Param  client
 //@Return error
 func (slf *DefaultDelegate) AsyncAccept(c net.INetClient) error {
-	privateKey, publicKey := slf._keyExc.KeyPair()
+	privateKey, publicKey := slf.KeyExc.KeyPair()
 	c.(*client).WithPrvKey(privateKey)
 	x := make([]byte, 8)
 	binary.BigEndian.PutUint64(x, publicKey)
@@ -213,7 +213,7 @@ func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
 		}
 
 		publicKey := binary.BigEndian.Uint64(c.ReadBuffer(8))
-		secret := slf._keyExc.Secret(gwClient.GetPrvKey(), publicKey)
+		secret := slf.KeyExc.Secret(gwClient.GetPrvKey(), publicKey)
 		rc4 := &encryption.NetRC4Encrypt{}
 		secretByte := make([]byte, 8)
 		binary.BigEndian.PutUint64(secretByte, secret)
@@ -224,12 +224,7 @@ func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
 
 	}
 
-	var encryptor encryption.INetEncryption
-	if slf._isOpenKey {
-		encryptor = gwClient.Encrypt()
-	}
-
-	name, data, err := decoder(encryptor, c)
+	name, data, err := decoder(slf.getEncrypt(gwClient), c)
 	if err != nil {
 		return nil, err
 	}
@@ -256,12 +251,6 @@ func (slf *DefaultDelegate) AsyncDecode(c net.INetClient) (*AgreMsg, error) {
 //@Return  error
 func (slf *DefaultDelegate) AsyncEncode(c net.INetClient,
 	response interface{}) ([]byte, error) {
-	gwClient := c.(*client)
-	var encryptor encryption.INetEncryption
-	if slf._isOpenKey {
-		encryptor = gwClient.Encrypt()
-	}
-
 	d, err := proto.Marshal(response.(proto.Message))
 	if err != nil {
 		return nil, err
@@ -269,13 +258,20 @@ func (slf *DefaultDelegate) AsyncEncode(c net.INetClient,
 
 	msgName := proto.MessageName(response.(proto.Message))
 
-	return encoder(encryptor, msgName, d), nil
+	return encoder(slf.getEncrypt(c.(*client)), msgName, d), nil
 }
 
-func TestDecoder(encrypt encryption.INetEncryption, bf net.INetReceiveBuffer) (string, []byte, error) {
+func (slf *DefaultDelegate) getEncrypt(c *client) encryption.INetEncryption {
+	if slf.IsEncrypt {
+		return c.Encrypt()
+	}
+	return nil
+}
+
+/*func TestDecoder(encrypt encryption.INetEncryption, bf net.INetReceiveBuffer) (string, []byte, error) {
 	return decoder(encrypt, bf)
 }
 
 func TestEncoder(encrypt encryption.INetEncryption, dataName string, data []byte) []byte {
 	return encoder(encrypt, dataName, data)
-}
+}*/
