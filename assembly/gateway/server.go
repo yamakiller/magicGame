@@ -4,7 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yamakiller/magicGame/assembly/service"
 	"github.com/yamakiller/magicLibs/coroutine"
+	"github.com/yamakiller/magicLibs/util"
 
 	"github.com/yamakiller/magicNet/network"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/yamakiller/magicNet/handler"
 	"github.com/yamakiller/magicNet/handler/implement/listener"
 	"github.com/yamakiller/magicNet/handler/net"
+	rpcc "github.com/yamakiller/magicRpc/assembly/client"
 )
 
 const (
@@ -175,6 +178,7 @@ func New(options ...Option) (*Server, error) {
 		srv._authTimeout = opts.AuthTimeout
 		srv._guardInterval = opts.GuardInterval
 		srv._rss = NewRouteSet(opts.Replicas)
+		srv._rssCtrlID = util.NewSnowFlake(int64(0), int64(opts.ServerID))
 		srv._listenHandle.Initial()
 		return srv._listenHandle
 	})
@@ -205,6 +209,7 @@ type Server struct {
 	_listenWait    sync.WaitGroup
 	_delegate      IServerDelegate
 	_rss           *RouteSet
+	_rssCtrlID     *util.SnowFlake
 	_authTimeout   int64
 	_guardInterval int64
 	_err           error
@@ -216,7 +221,7 @@ type Server struct {
 //@Return *RouteCtrl
 //@Return  error
 func (slf *Server) Control(opts *RouteOption) (*RouteCtrl, error) {
-	return newCtrl(opts)
+	return newCtrl(opts, slf.onCtrlConnected)
 }
 
 //Router Add a route
@@ -327,6 +332,22 @@ func (slf *Server) asyncComplate(sock int32) {
 	slf._err = nil
 	slf._listenWait.Add(1)
 	coroutine.Instance().Go(slf.asyncGuard)
+}
+
+func (slf *Server) onCtrlConnected(c *rpcc.RPCClient) {
+	id, _ := slf._rssCtrlID.NextID()
+	r, e := c.CallReturn("regCtrl.SignIn", &service.SignInReq{ClientHandle: uint64(id)})
+	if e != nil {
+		network.OperClose(c.GetSocket())
+		slf._listenHandle.LogError("RouteSet control sign in error:%+v", e)
+		return
+	}
+
+	if r.(*service.SignInRsp).GetCode() != 0 {
+		network.OperClose(c.GetSocket())
+		slf._listenHandle.LogError("RouteSet control sign in error:%+s", r.(*service.SignInRsp).GetMessage())
+		return
+	}
 }
 
 //Shutdown shutdown server

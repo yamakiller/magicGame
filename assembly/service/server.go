@@ -1,6 +1,10 @@
 package service
 
 import (
+	"errors"
+	"sync"
+
+	"github.com/yamakiller/magicNet/handler/net"
 	rpcsrv "github.com/yamakiller/magicRpc/assembly/server"
 )
 
@@ -12,6 +16,7 @@ type Options struct {
 	KeepTime     int
 	BufferCap    int
 	OutCChanSize int
+	Compare      func(a uint64, b uint64) int
 }
 
 //Option is a function on the options for a service.
@@ -65,6 +70,15 @@ func WithClientOutSize(outSize int) Option {
 	}
 }
 
+//WithCompare Set Client find Compare function
+func WithCompare(f func(a uint64, b uint64) int) Option {
+	return func(o *Options) error {
+		o.Compare = f
+		return nil
+	}
+}
+
+//New Create service
 func New(options ...Option) (*Server, error) {
 
 	opts := Options{}
@@ -90,7 +104,9 @@ func New(options ...Option) (*Server, error) {
 		return nil, err
 	}
 
+	srv._compare = opts.Compare
 	srv._rpcServer = rpcSrv
+	srv._rpcServer.RegRPC(&regCtrl{srv})
 
 	return srv, nil
 }
@@ -98,13 +114,60 @@ func New(options ...Option) (*Server, error) {
 //Server service
 type Server struct {
 	_rpcServer *rpcsrv.RPCServer
-	_ss
+	_ss        map[uint64]uint64 //[clietn id]socket handle
+	_compare   func(a uint64, b uint64) int
+	_sync      sync.RWMutex
 }
 
-func (slf *Server) asyncAccept(clientHandle uint64) {
+//Call call object client function
+func (slf *Server) Call(client uint64, method string, param interface{}) error {
 
+	var handle uint64
+	slf._sync.RLock()
+	for clientHandle, clientSocketHandle := range slf._ss {
+		if slf._compare(clientHandle, client) == 0 {
+			handle = clientSocketHandle
+			break
+		}
+	}
+	slf._sync.Unlock()
+	if handle == 0 {
+		return errors.New("unknown client")
+	}
+	return slf._rpcServer.Call(handle, method, param)
 }
 
-func (slf *Server) asyncClosed(clientHandle uint64) {
+func (slf *Server) asyncAccept(socketHandle uint64) {
+}
 
+func (slf *Server) asyncClosed(socketHandle uint64) {
+	slf._sync.Lock()
+	defer slf._sync.Unlock()
+
+	for k, v := range slf._ss {
+		if v == socketHandle {
+			delete(slf._ss, k)
+		}
+	}
+}
+
+type regCtrl struct {
+	_parent *Server
+}
+
+//Register client connection
+func (slf *regCtrl) SignIn(c net.INetClient, request *SignInReq) *SignInRsp {
+	handle := c.GetID()
+
+	slf._parent._sync.Lock()
+	defer slf._parent._sync.Unlock()
+
+	if v, ok := slf._parent._ss[request.ClientHandle]; ok {
+		if v != handle {
+			slf._parent._rpcServer.CloseClient(v)
+		}
+	}
+
+	slf._parent._ss[request.ClientHandle] = handle
+	return &SignInRsp{Code: 0}
 }

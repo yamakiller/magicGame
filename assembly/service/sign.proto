@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package service;
+
+//sign in client request
+message SignInReq {
+    uint64 clientHandle = 1;
+}
+
+//sign in client response
+message SignInRsp {
+    int32  code    = 1;
+    string message = 2;
+}

@@ -23,10 +23,10 @@ type RouteOption struct {
 	TimeOut       int    `xml:"timeout" yaml:"timeout" json:"timeout"`
 	Idle          int    `xml:"idle" yaml:"idle" json:"idle"`
 	Active        int    `xml:"active" yaml:"active" json:"active"`
-	IdleTimeout   int    `xml:"idle-timeoust" yaml:"idle timeout" json:"idle-timeout"`
+	IdleTimeout   int    `xml:"idle-timeout" yaml:"idle timeout" json:"idle-timeout"`
 }
 
-func newCtrl(opts *RouteOption) (*RouteCtrl, error) {
+func newCtrl(opts *RouteOption, asyncConnected func(*rpcc.RPCClient)) (*RouteCtrl, error) {
 	rcl := &RouteCtrl{}
 	p, err := rpcc.New(
 		rpcc.WithName(opts.Server),
@@ -38,6 +38,7 @@ func newCtrl(opts *RouteOption) (*RouteCtrl, error) {
 		rpcc.WithSocketTimeout(int64(opts.SocketTimeout)),
 		rpcc.WithTimeout(int64(opts.TimeOut)),
 		rpcc.WithIdleTimeout(int64(opts.IdleTimeout)),
+		rpcc.WithAsyncConnected(asyncConnected),
 	)
 
 	if err != nil {
