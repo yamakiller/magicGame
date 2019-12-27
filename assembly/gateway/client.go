@@ -74,50 +74,40 @@ func (slf *client) Encrypt() encryption.INetEncryption {
 
 func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message interface{}) {
 	req := message.(*AgreMsg)
-	addr, m, isauth, err := slf._parent._delegate.QueryLocalAgreement(req.Agreement)
-	if err != nil {
-		slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
+	m := slf._parent._delegate.getLocalCall(req.AgreementData)
+	if m == nil {
+		slf.LogError("local client %s => %d %s undefined", slf.GetAddr(), slf.GetSocket(), req.Agreement.(string))
 		return
 	}
 
-	if isauth {
-		if slf._auth <= 1 {
-			slf.LogError("client %s => %d %+v agreement need Authorization", slf.GetAddr(), slf.GetSocket(), req.Agreement)
-			network.OperClose(slf.GetSocket())
-			return
-		}
-	}
-
-	params := make([]reflect.Value, 2)
-	params[0] = reflect.ValueOf(addr)
-	params[1] = reflect.ValueOf(req.AgreementData)
-
+	params := make([]reflect.Value, 1)
+	params[0] = reflect.ValueOf(req.AgreementData)
 	rs := reflect.ValueOf(m).Call(params)
-	if len(rs) > 0 {
-		numrs := len(rs)
-		if err, ok := rs[numrs].Interface().(error); ok {
-			if err != nil {
-				slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
+	numOut := len(rs)
+	if numOut > 0 {
+		if rs[numOut-1].IsValid() {
+			if e, ok := rs[numOut-1].Interface().(error); ok {
+				slf.LogError("local client %s => %d %s", slf.GetAddr(), slf.GetSocket(), e.Error)
+				network.OperClose(slf.GetSocket())
 				return
 			}
+		}
 
-			if len(rs) == 1 {
-				return
-			}
+		if !rs[0].IsValid() {
+			return
 		}
 
 		d, err := slf._parent._delegate.AsyncEncode(slf, rs[0].Interface())
 		if err != nil {
-			slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
+			slf.LogError("client response %s => [%d] %s", slf.GetAddr(), slf.GetSocket(), err.Error)
 			return
 		}
 
 		if err = slf.SendTo(d); err != nil {
-			slf.LogError("client %s => %d %+v", slf.GetAddr(), slf.GetSocket(), err)
+			slf.LogError("response to client %s => %d %s", slf.GetAddr(), slf.GetSocket(), err.Error)
 			return
 		}
 	}
-
 }
 
 func (slf *client) Shutdown() {

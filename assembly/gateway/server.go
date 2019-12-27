@@ -198,8 +198,8 @@ type IServerDelegate interface {
 	AsyncEncode(net.INetClient, interface{}) ([]byte, error)
 	AsyncAccept(net.INetClient) error
 	AsyncClosed(uint64) error
-	QueryLocalAgreement(agreement interface{}) (string, interface{}, bool, error)
-	QueryRemoteAgreement(agreement interface{}) (string, error)
+	PutLocalCall(interface{}, interface{})
+	getLocalCall(interface{}) interface{}
 }
 
 //Server doc: Gateway Server

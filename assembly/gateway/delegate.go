@@ -111,38 +111,38 @@ func encoder(encrypt encryption.INetEncryption, dataName string, data []byte) []
 //@Member  remove method
 //@Member  is auth
 type DefaultAgreement struct {
-	Addr         string
-	LocalMethod  interface{}
-	RemoteMethod string
-	Auth         bool
+	Addr        string
+	LocalMethod interface{}
+	Auth        bool
 }
 
 //DefaultDelegate doc
 //@Summary default gateserver delegate instance
 //@Member  map  method
 type DefaultDelegate struct {
-	KeyExc    *dh64.KeyExchange
-	IsEncrypt bool
-	_mas      map[interface{}]*DefaultAgreement
+	KeyExc  *dh64.KeyExchange
+	Encrypt bool
+	_mas    map[interface{}]interface{}
 }
 
-//RegisterAgreement doc
+//PutLocalCall doc
 //@Summary register agreement
 //@Param agreement
 //@Param route address
 //@Param local method
 //@Param remote method
 //@Param is need auth
-func (slf *DefaultDelegate) RegisterAgreement(agreement interface{},
-	addr string,
-	localMethod interface{},
-	remoteMethod string,
-	auth bool) {
+func (slf *DefaultDelegate) PutLocalCall(param interface{}, localMethod interface{}) {
 
-	slf._mas[reflect.TypeOf(agreement)] = &DefaultAgreement{addr,
-		localMethod,
-		remoteMethod,
-		auth}
+	slf._mas[reflect.TypeOf(param)] = localMethod
+}
+
+func (slf *DefaultDelegate) getLocalCall(param interface{}) interface{} {
+	if v, ok := slf._mas[reflect.TypeOf(param)]; ok {
+		return v
+	}
+
+	return nil
 }
 
 //AsyncAccept doc
@@ -166,38 +166,6 @@ func (slf *DefaultDelegate) AsyncAccept(c net.INetClient) error {
 //@Return error
 func (slf *DefaultDelegate) AsyncClosed(handle uint64) error {
 	return nil
-}
-
-//QueryLocalAgreement doc
-//@Summary query agreement local method
-//@Param  agreement
-//@Return route address
-//@Return local method
-//@Return is auth
-//@Return error
-func (slf *DefaultDelegate) QueryLocalAgreement(agreement interface{}) (addr string,
-	localMethod interface{},
-	auth bool,
-	err error) {
-
-	if v, ok := slf._mas[agreement]; ok {
-		return v.Addr, v.LocalMethod, v.Auth, nil
-	}
-
-	return "", nil, false, nil
-}
-
-//QueryRemoteAgreement doc
-//@Summary query agreement remote method
-//@Param   agreement
-//@Return  remote method
-//@Return  error
-func (slf *DefaultDelegate) QueryRemoteAgreement(agreement interface{}) (string, error) {
-	if v, ok := slf._mas[agreement]; ok {
-		return v.RemoteMethod, nil
-	}
-
-	return "", fmt.Errorf("%+v protocol remote method is not defined", agreement)
 }
 
 //AsyncDecode doc
@@ -262,7 +230,7 @@ func (slf *DefaultDelegate) AsyncEncode(c net.INetClient,
 }
 
 func (slf *DefaultDelegate) getEncrypt(c *client) encryption.INetEncryption {
-	if slf.IsEncrypt {
+	if slf.Encrypt {
 		return c.Encrypt()
 	}
 	return nil
