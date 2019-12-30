@@ -119,6 +119,23 @@ type Server struct {
 	_sync      sync.RWMutex
 }
 
+//Listen listening
+func (slf *Server) Listen(addr string) error {
+	return slf._rpcServer.Listen(addr)
+}
+
+//Shutdown close server
+func (slf *Server) Shutdown() {
+	if slf._rpcServer != nil {
+		slf._rpcServer.Shutdown()
+	}
+}
+
+//PutCtrl put control
+func (slf *Server) PutCtrl(ctrl interface{}) error {
+	return slf._rpcServer.RegRPC(ctrl)
+}
+
 //Call call object client function
 func (slf *Server) Call(client uint64, method string, param interface{}) error {
 

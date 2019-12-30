@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -249,6 +250,18 @@ func (slf *Server) Listen(addr string) error {
 
 	slf._listenWait.Wait()
 	return slf._err
+}
+
+//WithCliAuth Set client auth
+func (slf *Server) WithCliAuth(handle uint64, auth int64) error {
+	c := slf._listenHandle.Grap(handle)
+	if c == nil {
+		return errors.New("client unkonw")
+	}
+
+	c.(*client).WithAuth(auth)
+	slf._listenHandle.Release(c)
+	return nil
 }
 
 func (slf *Server) defaultDecode(context actor.Context, params ...interface{}) error {

@@ -3,6 +3,8 @@ package gateway
 import (
 	"reflect"
 
+	"github.com/yamakiller/magicNet/timer"
+
 	"github.com/yamakiller/magicNet/network"
 
 	"github.com/yamakiller/magicNet/engine/actor"
@@ -32,6 +34,11 @@ func (slf *client) Initial() {
 //@Param uint64  handle/id
 func (slf *client) WithID(id uint64) {
 	slf._handle = id
+}
+
+func (slf *client) WithAuth(n int64) {
+	slf._auth = n
+	slf._authLastTime = int64(timer.Now())
 }
 
 //WithEncrypt doc
@@ -80,8 +87,9 @@ func (slf *client) onAgreement(context actor.Context, sender *actor.PID, message
 		return
 	}
 
-	params := make([]reflect.Value, 1)
-	params[0] = reflect.ValueOf(req.AgreementData)
+	params := make([]reflect.Value, 2)
+	params[0] = reflect.ValueOf(slf.GetID())
+	params[1] = reflect.ValueOf(req.AgreementData)
 	rs := reflect.ValueOf(m).Call(params)
 	numOut := len(rs)
 	if numOut > 0 {
