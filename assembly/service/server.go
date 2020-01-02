@@ -104,6 +104,7 @@ func New(options ...Option) (*Server, error) {
 		return nil, err
 	}
 
+	srv._ss = make(map[uint64]uint64)
 	srv._compare = opts.Compare
 	srv._rpcServer = rpcSrv
 	srv._rpcServer.RegRPC(&regCtrl{srv})

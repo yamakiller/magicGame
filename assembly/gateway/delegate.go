@@ -122,7 +122,7 @@ type DefaultAgreement struct {
 type DefaultDelegate struct {
 	KeyExc  *dh64.KeyExchange
 	Encrypt bool
-	_mas    map[interface{}]interface{}
+	Maps    map[interface{}]interface{}
 }
 
 //PutLocalCall doc
@@ -134,11 +134,11 @@ type DefaultDelegate struct {
 //@Param is need auth
 func (slf *DefaultDelegate) PutLocalCall(param interface{}, localMethod interface{}) {
 
-	slf._mas[reflect.TypeOf(param)] = localMethod
+	slf.Maps[reflect.TypeOf(param)] = localMethod
 }
 
 func (slf *DefaultDelegate) getLocalCall(param interface{}) interface{} {
-	if v, ok := slf._mas[reflect.TypeOf(param)]; ok {
+	if v, ok := slf.Maps[reflect.TypeOf(param)]; ok {
 		return v
 	}
 
